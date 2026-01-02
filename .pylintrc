@@ -1,0 +1,15 @@
+[MASTER]
+load-plugins=pylint_django
+django-settings-module=chatbotapp.settings
+ignore=migrations,myvenv,__pycache__
+max-line-length=120
+
+[MESSAGES CONTROL]
+disable=
+    missing-docstring,
+    too-few-public-methods,
+    no-member,
+    too-many-locals,
+    too-many-branches
+
+

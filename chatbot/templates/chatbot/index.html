@@ -20,7 +20,6 @@
             background: #020617;
         }
 
-        /* ===== APP LAYOUT ===== */
         .app {
             display: flex;
             height: 100vh;
@@ -52,18 +51,71 @@
         }
 
         .history-item {
-            display: block;
-            background: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #305ba1;
             padding: 10px;
             border-radius: 8px;
             margin-bottom: 8px;
             font-size: 13px;
             color: #e5e7eb;
+            position: relative;
+        }
+
+        .history-item a {
+            color: #e5e7eb;
             text-decoration: none;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .history-item:hover {
-            background: #334155;
+            background: #093777;
+        }
+
+        /* ===== CHATGPT STYLE MENU ===== */
+        .menu-btn {
+            background: transparent;
+            border: none;
+            color: #cbd5f5;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+
+        .menu-btn:hover {
+            color: white;
+        }
+
+        .menu {
+            position: absolute;
+            right: 10px;
+            top: 42px;
+            background: #020617;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            width: 120px;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .menu button {
+            background: transparent;
+            border: none;
+            width: 100%;
+            padding: 10px 14px;
+            color: #f87171;
+            text-align: left;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .menu button:hover {
+            background: rgba(239, 68, 68, 0.15);
         }
 
         .chat-history-title {
@@ -83,11 +135,6 @@
             cursor: pointer;
             width: 100%;
             text-align: center;
-            transition-duration: 0.4s;
-        }
-
-        .logout-link:hover {
-            color: #4ccef6;
         }
 
         /* ===== CHAT AREA ===== */
@@ -138,66 +185,6 @@
             margin-right: auto;
         }
 
-        /* ===== FILE PREVIEW ===== */
-        .file-preview {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            max-width: 360px;
-            padding: 10px 14px;
-            margin: 10px 20px;
-            background: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 14px;
-        }
-
-        .file-preview.hidden {
-            display: none;
-        }
-
-        .file-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            background: #ef4444;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .file-info {
-            flex: 1;
-            overflow: hidden;
-        }
-
-        .file-name {
-            color: #e5e7eb;
-            font-size: 14px;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .file-type {
-            font-size: 12px;
-            color: #9ca3af;
-        }
-
-        .file-remove {
-            background: transparent;
-            border: none;
-            color: #9ca3af;
-            font-size: 18px;
-            cursor: pointer;
-        }
-
-        .file-remove:hover {
-            color: #ef4444;
-        }
-
-        /* ===== INPUT BAR ===== */
         .chat-footer {
             padding: 14px 20px;
             border-top: 1px solid #1e293b;
@@ -218,6 +205,38 @@
             border-radius: 10px;
             font-size: 22px;
             cursor: pointer;
+        }
+
+        .file-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #1f2937;
+            border-radius: 10px;
+            padding: 6px 10px;
+            margin-right: 6px;
+            margin-bottom: 6px;
+            color: #e5e7eb;
+            font-size: 13px;
+        }
+
+        .file-chip span {
+            max-width: 160px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-chip button {
+            background: transparent;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .file-chip button:hover {
+            color: #ef4444;
         }
 
         .chat-form input[type="text"] {
@@ -246,16 +265,29 @@
         <div class="sidebar">
             <form method="post" action="{% url 'new_chat' %}">
                 {% csrf_token %}
-                <button class="new-chat-btn">+ New Chat</button>
+                <button class="new-chat-btn"> + New Chat </button>
             </form>
 
             <div class="chat-history-title">Chat History</div>
 
             <div class="history">
                 {% for chat in chat_list %}
-                <a href="?conversation={{ chat.conversation_id }}" class="history-item">
-                    {{ chat.title|truncatechars:30 }}
-                </a>
+                <div class="history-item">
+
+                    <a href="/?conversation={{ chat.conversation_id }}">
+                        {{ chat.title|truncatechars:30 }}
+                    </a>
+
+                    <button type="button" class="menu-btn" onclick="toggleMenu('{{ chat.conversation_id }}')">⋮</button>
+
+                    <div class="menu" id="menu-{{ chat.conversation_id }}">
+                        <form method="post" action="/delete-chat/{{ chat.conversation_id }}/">
+                            {% csrf_token %}
+                            <button type="submit">Delete</button>
+                        </form>
+                    </div>
+
+                </div>
                 {% endfor %}
             </div>
 
@@ -267,7 +299,6 @@
 
         <!-- CHAT -->
         <div class="chat-container">
-
             <div class="chat-header">
                 <div class="chat-title">Chatbot 🤖</div>
                 <div class="welcome-text">Welcome, {{ request.user.username }} 😊</div>
@@ -280,61 +311,107 @@
                 {% endfor %}
             </div>
 
-            <!-- FILE PREVIEW -->
-            <div id="filePreview" class="file-preview hidden">
-                <div class="file-icon">📄</div>
-                <div class="file-info">
-                    <div id="fileName" class="file-name"></div>
-                    <div id="fileType" class="file-type">Document</div>
-                </div>
-                <button type="button" id="removeFile" class="file-remove">✕</button>
-            </div>
-
-            <!-- INPUT -->
             <div class="chat-footer">
+                <!-- FILE CHIPS (ChatGPT style) -->
+                <div id="fileChips" style="display:none; margin-bottom:10px;"></div>
                 <form method="post" class="chat-form" enctype="multipart/form-data">
                     {% csrf_token %}
-
-                    <input type="file" id="file-upload" name="document" hidden>
-
+                    <input type="file" id="file-upload" name="document" multiple hidden>
                     <button type="button" class="upload-btn" id="uploadBtn">+</button>
-
                     <input type="text" name="message" placeholder="Type your message..." autocomplete="off">
-
                     <button type="submit" class="send-btn">Send</button>
                 </form>
+            </div>
+
+            <div id="filePreview" class="file-preview hidden">
+                <div id="fileList"></div>
             </div>
 
         </div>
     </div>
 
     <script>
-        const uploadBtn = document.getElementById("uploadBtn");
-        const fileInput = document.getElementById("file-upload");
-        const filePreview = document.getElementById("filePreview");
-        const fileName = document.getElementById("fileName");
-        const fileType = document.getElementById("fileType");
-        const removeFile = document.getElementById("removeFile");
+        function toggleMenu(id) {
+            document.querySelectorAll(".menu").forEach(menu => {
+                if (menu.id !== "menu-" + id) {
+                    menu.style.display = "none";
+                }
+            });
 
-        uploadBtn.onclick = () => fileInput.click();
+            const menu = document.getElementById("menu-" + id);
+            menu.style.display = menu.style.display === "block" ? "none" : "block";
+        }
 
-        fileInput.onchange = () => {
-            if (fileInput.files.length) {
-                const file = fileInput.files[0];
-                fileName.textContent = file.name;
-                fileType.textContent = file.type || "Document";
-                filePreview.classList.remove("hidden");
+        document.addEventListener("click", function (e) {
+            if (!e.target.classList.contains("menu-btn")) {
+                document.querySelectorAll(".menu").forEach(menu => {
+                    menu.style.display = "none";
+                });
             }
-        };
+        });
 
-        removeFile.onclick = () => {
-            fileInput.value = "";
-            filePreview.classList.add("hidden");
-        };
-
-        // Auto-scroll
+        // Auto scroll
         const chatBody = document.getElementById("chatBody");
         chatBody.scrollTop = chatBody.scrollHeight;
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+
+            const uploadBtn = document.getElementById("uploadBtn");
+            const fileInput = document.getElementById("file-upload");
+            const filePreview = document.getElementById("filePreview");
+            const fileList = document.getElementById("fileList");
+
+            if (!uploadBtn || !fileInput || !filePreview || !fileList) {
+                console.error("Upload elements missing");
+                return;
+            }
+
+            // Open file selector
+            uploadBtn.addEventListener("click", function () {
+                fileInput.click();
+            });
+
+            // Show selected files
+            fileInput.addEventListener("change", function () {
+                fileList.innerHTML = "";
+
+                if (fileInput.files.length === 0) {
+                    filePreview.classList.add("hidden");
+                    return;
+                }
+
+                filePreview.classList.remove("hidden");
+
+                Array.from(fileInput.files).forEach((file, index) => {
+                    const chip = document.createElement("div");
+                    chip.className = "file-chip";
+
+                    const name = document.createElement("span");
+                    name.textContent = file.name;
+
+                    const removeBtn = document.createElement("button");
+                    removeBtn.type = "button";
+                    removeBtn.textContent = "✕";
+                    removeBtn.onclick = () => removeFile(index);
+
+                    chip.appendChild(name);
+                    chip.appendChild(removeBtn);
+                    fileList.appendChild(chip);
+                });
+            });
+
+            function removeFile(removeIndex) {
+                const dt = new DataTransfer();
+                Array.from(fileInput.files).forEach((file, index) => {
+                    if (index !== removeIndex) dt.items.add(file);
+                });
+                fileInput.files = dt.files;
+                fileInput.dispatchEvent(new Event("change"));
+            }
+
+        });
     </script>
 
 </body>

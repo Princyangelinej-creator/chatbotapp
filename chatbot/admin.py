@@ -9,3 +9,4 @@ class ChatMessageAdmin(admin.ModelAdmin):
     """Admin class for chatmessages."""
 
     list_display = ("user", "user_message", "bot_reply", "created_at")
+    

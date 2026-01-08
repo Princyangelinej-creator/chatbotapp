@@ -1,6 +1,6 @@
 """Embeddings for the chatbot application."""
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # Load once
 embeddings = HuggingFaceEmbeddings(

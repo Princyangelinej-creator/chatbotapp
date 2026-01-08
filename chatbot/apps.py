@@ -1,3 +1,4 @@
+
 """App configuration for the chatbot application."""
 
 from django.apps import AppConfig

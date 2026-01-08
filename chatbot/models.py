@@ -37,3 +37,4 @@ class UserMemory(models.Model):
     def __str__(self):
         """Return a readable string representation of user memory."""
         return f"Memory of {self.user.username}"
+        

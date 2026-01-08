@@ -32,3 +32,4 @@ def get_ai_reply(prompt: str) -> str:
 
     except Exception as e: # pylint: disable=broad-exception-caught
         return f"⚠️ Groq Error: {str(e)}"
+        

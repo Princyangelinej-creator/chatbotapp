@@ -1,54 +1,88 @@
-"""Views for chatbot app."""
-
-# pylint: disable=no-member
+"""Views for chatbot app"""
 
 import uuid
+import re
+from typing import Optional   
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import login, authenticate
 from django.db.models import Min
+from django.views.decorators.http import require_POST
 
-from .models import ChatMessage
+from .models import ChatMessage, UserMemory
 from .openai_client import get_ai_reply
 from .rag.loader import extract_text
 from .rag.rag_pipeline import process_document, get_relevant_context
-from .rag.vectorstore import has_documents
+from .rag.vectorstore import list_documents
 
 
-# ----------------------------------------
-# Detect personal / memory questions
-# ----------------------------------------
-def is_personal_question(message: str) -> bool:
-    """Check whether the user message asks about personal or remembered data."""
-    keywords = [
-        "my name",
-        "my friend",
-        "friend name",
-        "who is my",
-        "what is my",
-        "do you remember",
-    ]
-    return any(k in message.lower() for k in keywords)
+
+def extract_word_limit(message):
+    match = re.search(r"\b(\d+)\s*words\b", message.lower())
+    return int(match.group(1)) if match else None
+
+
+
+def save_user_name(user, message):
+    match = re.search(r"my name is ([a-zA-Z ]+)", message.lower())
+    if match:
+        name = match.group(1).strip().title()
+        memory, _ = UserMemory.objects.get_or_create(user=user)
+        memory.memory = f"User name is {name}"
+        memory.save()
+
+
+def get_user_name(user):
+    try:
+        memory = UserMemory.objects.get(user=user)
+        if memory.memory.lower().startswith("user name is"):
+            return memory.memory.replace("User name is", "").strip()
+    except UserMemory.DoesNotExist:
+        pass
+    return None
+
+
+
+
+
+def extract_doc_index(message: str) -> Optional[int]:
+    msg = message.lower()
+
+    if "first document" in msg:
+        return 0
+    if "second document" in msg:
+        return 1
+    if "third document" in msg:
+        return 2
+
+    if "document" in msg or "file" in msg or "pdf" in msg:
+        return -1  
+
+    return None
+
 
 
 @login_required
-def chatbot_view(request):
-    """Render chatbot page and handle chat messages and document uploads."""
-    conversation_id = request.GET.get("conversation") or request.session.get("conversation_id")
-    if not conversation_id:
-        conversation_id = str(uuid.uuid4())
+def home(request):
+    user = request.user
+
+    conversation_id = (
+        request.GET.get("conversation")
+        or request.session.get("conversation_id")
+        or str(uuid.uuid4())
+    )
     request.session["conversation_id"] = conversation_id
 
     messages = ChatMessage.objects.filter(
-        user=request.user,
+        user=user,
         conversation_id=conversation_id
     ).order_by("created_at")
 
     chat_list = (
         ChatMessage.objects
-        .filter(user=request.user)
+        .filter(user=user)
         .values("conversation_id")
         .annotate(first_time=Min("created_at"))
         .order_by("-first_time")
@@ -56,58 +90,93 @@ def chatbot_view(request):
 
     for chat in chat_list:
         first_msg = ChatMessage.objects.filter(
-            user=request.user,
+            user=user,
             conversation_id=chat["conversation_id"]
         ).order_by("created_at").first()
-        chat["title"] = first_msg.user_message if first_msg else "New Chat"
+
+        chat["title"] = (
+            first_msg.user_message[:40]
+            if first_msg and first_msg.user_message
+            else "New chat"
+        )
 
     if request.method == "POST":
         user_message = request.POST.get("message", "").strip()
-        uploaded_file = request.FILES.get("document")
+        uploaded_files = request.FILES.getlist("document")
 
-        if uploaded_file:
+        
+        for uploaded_file in uploaded_files:
+            existing_docs = list_documents(conversation_id)
+            doc_id = f"doc{len(existing_docs) + 1}"  
+
             text = extract_text(uploaded_file)
-            process_document(conversation_id, text)
+            process_document(conversation_id, doc_id, text)
 
             ChatMessage.objects.create(
-                user=request.user,
+                user=user,
                 conversation_id=conversation_id,
-                user_message=f"📎 Uploaded file: {uploaded_file.name}",
-                bot_reply="Document received. You can now ask questions from it."
+                user_message=f"📎 Uploaded ({doc_id}): {uploaded_file.name}",
+                bot_reply="Document uploaded successfully."
             )
 
-        recent_messages = messages.order_by("-created_at")[:10][::-1]
-        conversation_context = ""
-
-        for msg in recent_messages:
-            conversation_context += f"User: {msg.user_message}\n"
-            conversation_context += f"AI: {msg.bot_reply}\n"
-
+        
         if user_message:
-            if is_personal_question(user_message):
-                prompt = conversation_context + f"\nUser: {user_message}"
+            save_user_name(user, user_message)
 
-            elif has_documents(conversation_id):
-                context_from_docs = get_relevant_context(conversation_id, user_message)
-                prompt = f"""
-Answer ONLY using the document below.
-If the answer is not present, say exactly:
-"I couldn't find this information in the uploaded document."
-
-Context:
-{context_from_docs or "NO RELEVANT CONTENT FOUND"}
-
-Question:
-{user_message}
-"""
+            if "what is my name" in user_message.lower():
+                name = get_user_name(user)
+                ai_reply = f"Your name is {name}." if name else "I don't know your name yet."
 
             else:
-                prompt = conversation_context + f"\nUser: {user_message}"
+                recent = messages.order_by("-created_at")[:8][::-1]
+                history = ""
 
-            ai_reply = get_ai_reply(prompt)
+                for m in recent:
+                    history += f"User: {m.user_message}\nAI: {m.bot_reply}\n"
+
+                word_limit = extract_word_limit(user_message)
+                instruction = (
+                    f"\n\nAnswer in EXACTLY {word_limit} words."
+                    if word_limit else ""
+                )
+
+               
+                doc_keys = list_documents(conversation_id)
+                doc_index = extract_doc_index(user_message)
+                selected_doc = None
+
+                if doc_index is not None and doc_keys:
+                    if doc_index == -1:
+                        selected_doc = doc_keys[-1]
+                    elif 0 <= doc_index < len(doc_keys):
+                        selected_doc = doc_keys[doc_index]
+
+                if selected_doc:
+                    context = get_relevant_context(
+                        conversation_id,
+                        selected_doc,
+                        user_message
+                    )
+
+                    prompt = f"""
+Answer ONLY using the selected document ({selected_doc}).
+If not found, say:
+"I couldn't find this information in the selected document."
+
+DOCUMENT:
+{context or "NO MATCH"}
+
+QUESTION:
+{user_message}
+{instruction}
+"""
+                else:
+                    prompt = history + f"\nUser: {user_message}{instruction}"
+
+                ai_reply = get_ai_reply(prompt)
 
             ChatMessage.objects.create(
-                user=request.user,
+                user=user,
                 conversation_id=conversation_id,
                 user_message=user_message,
                 bot_reply=ai_reply
@@ -115,22 +184,36 @@ Question:
 
         return redirect(f"/?conversation={conversation_id}")
 
-    return render(request, "chatbot/index.html", {
-        "messages": messages,
-        "chat_list": chat_list,
-        "active_conversation": conversation_id
-    })
+    return render(
+        request,
+        "chatbot/index.html",
+        {
+            "messages": messages,
+            "chat_list": chat_list,
+            "active_conversation": conversation_id,
+        }
+    )
+
 
 
 @login_required
 def new_chat(request):
-    """Start a new chat by creating a new conversation ID."""
     request.session["conversation_id"] = str(uuid.uuid4())
     return redirect("home")
 
 
+
+@login_required
+@require_POST
+def delete_chat(request, conversation_id):
+    ChatMessage.objects.filter(
+        user=request.user,
+        conversation_id=conversation_id
+    ).delete()
+    return redirect("home")
+
+
 def signup_view(request):
-    """Register a new user account."""
     if request.method == "POST":
         form = UserCreationForm(request.POST)
         if form.is_valid():
@@ -143,7 +226,6 @@ def signup_view(request):
 
 
 def login_view(request):
-    """Authenticate and log in an existing user."""
     if request.method == "POST":
         form = AuthenticationForm(request, data=request.POST)
         if form.is_valid():

@@ -2,7 +2,7 @@
 
 import uuid
 import re
-from typing import Optional   
+from typing import Optional
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -58,7 +58,7 @@ def extract_doc_index(message: str) -> Optional[int]:
         return 2
 
     if "document" in msg or "file" in msg or "pdf" in msg:
-        return -1  
+        return -1
 
     return None
 
@@ -104,10 +104,10 @@ def home(request):
         user_message = request.POST.get("message", "").strip()
         uploaded_files = request.FILES.getlist("document")
 
-        
+
         for uploaded_file in uploaded_files:
             existing_docs = list_documents(conversation_id)
-            doc_id = f"doc{len(existing_docs) + 1}"  
+            doc_id = f"doc{len(existing_docs) + 1}"
 
             text = extract_text(uploaded_file)
             process_document(conversation_id, doc_id, text)
@@ -119,7 +119,7 @@ def home(request):
                 bot_reply="Document uploaded successfully."
             )
 
-        
+
         if user_message:
             save_user_name(user, user_message)
 
@@ -140,7 +140,7 @@ def home(request):
                     if word_limit else ""
                 )
 
-               
+
                 doc_keys = list_documents(conversation_id)
                 doc_index = extract_doc_index(user_message)
                 selected_doc = None
